@@ -13,8 +13,10 @@ def _times(a_string, index):
     
     :param a_string: String to split
     :param index: 0 for start 1 for end
-    :return: return start or end depending on index
+    :return: None if a_string is empty, else returns start or end depending on index
     """  
+    if a_string == '':
+        return None
     
     # split string using re lib
     splits = re.split(r'[, :]', a_string)
@@ -32,7 +34,6 @@ def _times(a_string, index):
 
     return t
 
-
 def youtube2df(filepath, aws_path=True):
     """ Transform YouTube caption format to pandas DataFrame
     
@@ -42,7 +43,6 @@ def youtube2df(filepath, aws_path=True):
     :return: pandas DataFrame with columns 'orig_index', 'start', 'end', 'transcript'
     """
     if aws_path:
-        # Read the file from AWS S3 bucket
         fpath = urlparse(filepath)
         bucket = fpath.netloc
         key = fpath.path.lstrip('/')
@@ -50,23 +50,22 @@ def youtube2df(filepath, aws_path=True):
         obj = s3.Object(bucket, key)
         file = obj.get()['Body'].read().decode('utf8')
     else:
-        # Read the file from local filesystem
+        # read the file
         with open(filepath) as f:
             file = f.read()
 
-    # Split the file
+    # split the file
     lines = file.splitlines()
-
     # compress into tuples of three, ignoring 4th
     # tuples = [index, time, transcript]
-    ## TODO: Fix a bug when there is no 4th data (the blank one)
-    tps = [(lines[i], _times(lines[i + 1], 0), _times(lines[i + 1], 1), lines[i + 2]) for i in range(0, len(lines), 4)]
-
+    #if _times(lines[i], 0)
+    tps = [(lines[i], _times(lines[i + 1], 0), _times(lines[i + 1], 1), lines[i + 2]) for i in range(0, len(lines), 4) 
+           if i + 2 < len(lines) and (_times(lines[i + 1], 0) is not None)]
+    
     # convert to dataframe
     _df = pd.DataFrame(tps, columns=['orig_index', 'start', 'end', 'transcript'])
 
     return _df
-
 
 # AWS function with filepath to json function
 def aws2df(filepath, aws_path=True):
