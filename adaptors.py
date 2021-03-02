@@ -7,6 +7,8 @@ import logging
 from botocore.exceptions import ClientError
 from pytube import YouTube
 from urllib.parse import urlparse
+import random as rd
+
 
 def _times(a_string, index):
     """ create internal function that splits time into 'start' and 'end' times
@@ -120,3 +122,91 @@ def upload_yt_file(file_name, bucket='awstranscribe-tests', object_name=None):
         logging.error(e)
         return False
     return True
+
+### TODO: Move to adaptaros.py and standarice this code.
+def get_all_s3_objects(s3, **base_kwargs):
+    """ Amplify the limit of AWS results to 1000+
+    
+    :param s3: Bucket to amplify the result limit
+    :return: None
+    """
+    continuation_token = None
+    while True:
+        list_kwargs = dict(MaxKeys=1000, **base_kwargs)
+        if continuation_token:
+            list_kwargs['ContinuationToken'] = continuation_token
+        response = s3.list_objects_v2(**list_kwargs)
+        yield from response.get('Contents', [])
+        if not response.get('IsTruncated'):  # At the end of the list?
+            break
+        continuation_token = response.get('NextContinuationToken')
+
+def get_folder_list(bucket='awstranscribe-tests', key='transcribeOutputs/Files'):
+    """ Get the name of the files inside an AWS S3 Bucket
+    
+    :param bucket: AWS S3 bucket name
+    :param key: directory and name in bucket, defaults to transcribeOutputs/Files
+    :return: List with the name of each object in the S3 key
+    """
+    ###
+    #  Get the name of the files in a bucket. While bucket is the AWS S3 Bucket and key is the folder inside that bucket
+    # it defaults to transcribeOutputs/Files
+    ###
+    s3 = boto3.client('s3')
+    data_loc = []
+    for obj in get_all_s3_objects(s3, Bucket=bucket, Prefix=key):
+        names = 's3://{}/{}'.format(bucket, obj['Key'])
+        data_loc.append(names)
+    return data_loc
+
+def vocabulary_shuffle(vocab_name='IPA_Shuffle', words=10):
+    ''' Create a random vocabulary of 'words' number of words from big_ass_dictionary.txt
+    
+    :param vocab_name: Vocabulary Name, defaults to IPA_Shuffle
+    :param words: Number of words from big_ass_dictionary
+    '''
+    # Declare transcribe client
+    client = boto3.client('transcribe')
+    
+    # Lists vocabularies if vocab_name exists
+    response = client.list_vocabularies(
+        StateEquals='READY',
+        NameContains=vocab_name
+        )
+    # Create a random vocabulary from big_ass_dictionary.txt
+    filepath = 's3://awstranscribe-tests/customVocabIPA/big_ass_dictionary.txt'
+    fpath = urlparse(filepath)
+    bucket = fpath.netloc
+    key = fpath.path.lstrip('/')
+    s3 = boto3.resource('s3')
+    obj = s3.Object(bucket, key)
+    file = obj.get()['Body'].read().decode('utf8')
+
+    file = file.splitlines()
+
+    n = words
+    with open(f'/tmp/{vocab_name}.txt', 'w') as f:    
+        f.write(file[0])
+        f.write("\n")
+        for i in range(n):
+            f.write(rd.choice(file))
+            f.write("\n")
+        
+    # Upload file to S3
+    upload_yt_file(f'/tmp/{vocab_name}.txt', object_name=f'customVocabIPA/{vocab_name}.txt')
+
+    # If vocabulary exists update the vocab, else create a new one
+    if response['Vocabularies']:
+        vocab = client.update_vocabulary(
+            VocabularyName=vocab_name,
+            LanguageCode='es-ES',
+            VocabularyFileUri=f's3://awstranscribe-tests/customVocabIPA/{vocab_name}.txt'
+        )
+        return print(f'Updating Vocab: {vocab_name}\n {vocab}')
+    else:
+        vocab = client.create_vocabulary(
+            VocabularyName=vocab_name,
+            LanguageCode='es-ES',
+            VocabularyFileUri=f's3://awstranscribe-tests/customVocabIPA/{vocab_name}.txt'
+        )
+        return print(f'Creating Vocab: {vocab_name}\n {vocab}')
