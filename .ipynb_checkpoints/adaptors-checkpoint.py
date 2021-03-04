@@ -8,6 +8,8 @@ from botocore.exceptions import ClientError
 from pytube import YouTube
 from urllib.parse import urlparse
 import random as rd
+import unidecode as uni
+import Levenshtein as lv
 
 
 def _times(a_string, index):
@@ -98,7 +100,7 @@ def aws2df(filepath, aws_path=True):
     # transform to df
     _df = pd.DataFrame(tuples, columns=['start', 'end', 'transcript'])
 
-    return _df
+    return _df.astype({'start':'float', 'end':'float', 'transcript':'string'})
 
 def upload_yt_file(file_name, bucket='awstranscribe-tests', object_name=None):
     """ Upload YouTube file to an S3 bucket
@@ -210,3 +212,59 @@ def vocabulary_shuffle(vocab_name='IPA_Shuffle', words=10):
             VocabularyFileUri=f's3://awstranscribe-tests/customVocabIPA/{vocab_name}.txt'
         )
         return print(f'Creating Vocab: {vocab_name}\n {vocab}')
+    
+def neutralize(a_string):
+    ''' Neutralize a string, removing unnecesary characters
+    
+    :param a_string: the string to neutralize
+    :return: a_string without unnecesary characters like tildes and HTML annotations
+    '''
+    a_string = uni.unidecode(a_string)
+    a_string = re.sub('[?!@#$.,/]', '', a_string)
+    clean = re.compile('<.*?>')
+    a_string = re.sub(clean, '', a_string)
+    clean = re.compile(".*?\((.*?)\)")
+    a_string = re.sub(clean, '', a_string)
+    return a_string.lower()
+
+def compress(df_reference, df_to_modify, field='transcript'):
+    ''' Compreses separate words into phrase using start and end time notations.
+        The df_reference and df_to_modify must have start and end columns
+        
+    :param df_reference: reference DataFrame that contains the "real transcription"
+    :param df_to_modify: DataFrame that needs to be compressed into phrases
+    :return: The phrase with space between strings
+    '''
+    container = []
+    for start, end in zip(df_reference['start'], df_reference['end']):
+        sub_df = df_to_modify[(df_to_modify['start'] >= start) & (df_to_modify['end'] <= end)]
+        
+        words = [a_word for a_word in sub_df[field]]
+        container.append(' '.join(word for word in words))
+        
+    return container
+
+def lv_score(a_series, b_series):
+    ''' Generate Levenshtein score based on the Levenshtein distance between two strings
+    
+    :param a_series: A series or string 
+    :param b_series: A series or string
+    :return: Levenshtein score between two strings
+    '''
+    metric = 0
+    m_list = []
+    for a_string, b_string in zip(a_series, b_series):
+        a_string = neutralize(a_string)
+        b_string = neutralize(b_string)
+        metric = lv.distance(a_string, b_string) / len(a_string)
+        m_list.append(1 - metric)
+        
+    return m_list
+
+def average(lst):
+    ''' Average of a list
+    
+    :param lst: A list
+    :return: Average of values on the list
+    '''
+    return sum(lst) / len(lst)
