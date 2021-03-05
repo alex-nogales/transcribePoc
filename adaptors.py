@@ -91,7 +91,7 @@ def aws2df(filepath, aws_path=True):
     # compress into tuples
     tuples = []
     for value in data['results']['items']:
-        if value.get('start_time'):
+        if value.get('start_time'): 
             tuples.append((value.get('start_time'),
                            value.get('end_time'),
                            value['alternatives'][0].get('content')
