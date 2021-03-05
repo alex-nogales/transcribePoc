@@ -91,7 +91,7 @@ def aws2df(filepath, aws_path=True):
     # compress into tuples
     tuples = []
     for value in data['results']['items']:
-        if value.get('start_time'):
+        if value.get('start_time'): 
             tuples.append((value.get('start_time'),
                            value.get('end_time'),
                            value['alternatives'][0].get('content')
@@ -256,7 +256,11 @@ def lv_score(a_series, b_series):
     for a_string, b_string in zip(a_series, b_series):
         a_string = neutralize(a_string)
         b_string = neutralize(b_string)
-        metric = lv.distance(a_string, b_string) / len(a_string)
+        if len(a_string) >= len(b_string):
+            length = len(a_string)
+        else:
+            length = len(b_string)
+        metric = lv.distance(a_string, b_string) / length
         m_list.append(1 - metric)
         
     return m_list
