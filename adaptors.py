@@ -272,3 +272,37 @@ def average(lst):
     :return: Average of values on the list
     '''
     return sum(lst) / len(lst)
+
+
+def youtube2aws(url):
+    ''' Convert YouYubue videos to mp4, exctracts spanish translate if exists
+    
+    :param url: Link to the video to uplaod
+    :return: Nothing
+    '''
+    yt = YouTube(url)
+    # Get the tittle and replace spaces with underscore
+    yt_title = yt.title.replace(' ', '_')
+    yt_title = unicodedata.normalize('NFKD', yt_title).encode('ASCII', 'ignore').decode('utf-8')
+    yt_title = re.sub('\+', '', yt_title)
+    
+    # Download the video to tmp folder and save the output name to file_name
+    file_name = yt.streams.first().download(output_path="/tmp" ,filename=yt_title)
+    
+    upload_yt_file(file_name)
+    
+    if yt.captions.get_by_language_code('es-419'):
+        code = 'es-419'
+        caption = yt.captions.get_by_language_code('es-419')
+        yt_caption = caption.generate_srt_captions()
+        yt_title = yt.title.replace(' ', '_')
+        yt_title = unicodedata.normalize('NFKD', yt_title).encode('ASCII', 'ignore').decode('utf-8')
+        yt_title = re.sub('\+', '', yt_title)
+        with open(f'/tmp/{yt_title}_{code}.txt', 'a') as f:
+            f.write(yt_caption)
+        upload_yt_file(f'/tmp/{yt_title}_{code}.txt', object_name=f'levenshteinTests/ytCaptions/{yt_title}.txt')
+    else:
+        print('This caption doesn\'t exist for this video: ', yt.title)
+        print('You can use one of the following captions: \n', yt.captions.all())
+        
+    
